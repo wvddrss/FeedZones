@@ -1,10 +1,9 @@
 import { Stack, useRouter } from 'expo-router';
-import { View, Text, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, Alert, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useState } from 'react';
 import * as DocumentPicker from 'expo-document-picker';
 import { readAsStringAsync } from 'expo-file-system/legacy';
-import { Button } from '@/components/Button';
-import { Container } from '@/components/Container';
+import { Upload, Map, ArrowRight, RotateCcw } from 'lucide-react-native';
 import { useStore } from '@/store/store';
 import { parseGPX } from '@/utils/gpxParser';
 
@@ -62,49 +61,78 @@ export default function Home() {
   };
 
   return (
-    <View className="flex flex-1 bg-gray-50">
-      <Stack.Screen options={{ title: 'Refuel' }} />
-      <Container>
-        <View className="flex-1 justify-center px-4">
-          <View className="mb-8 items-center">
-            <Text className="mb-2 text-4xl font-bold text-gray-900">🗺️ Refuel</Text>
-            <Text className="text-center text-lg text-gray-600">
-              Plan your route with essential stops
-            </Text>
-          </View>
+    <View className="flex-1 bg-white">
+      <Stack.Screen options={{ headerShown: false }} />
 
-          <View className="mb-8 rounded-lg bg-blue-50 p-4">
-            <Text className="text-center leading-6 text-gray-700">
-              Load a GPX file to find water supplies, stores, and restaurants along your route.
-            </Text>
-          </View>
-
-          {gpxFileName && (
-            <View className="mb-8 rounded-lg bg-green-50 p-4">
-              <Text className="mb-1 text-sm text-gray-600">Current GPX:</Text>
-              <Text className="text-base font-semibold text-green-700">{gpxFileName}</Text>
-            </View>
-          )}
-
-          <View className="gap-3">
-            {loading ? (
-              <ActivityIndicator size="large" color="#2563eb" />
-            ) : (
-              <>
-                <Button title="📁 Load GPX File" onPress={handleSelectGPX} />
-                {gpxFileName && (
-                  <>
-                    <View style={{ height: 12 }} />
-                    <Button title="Continue" onPress={() => router.push('/poi-selection')} />
-                    <View style={{ height: 12 }} />
-                    <Button title="Reset" onPress={handleReset} />
-                  </>
-                )}
-              </>
-            )}
-          </View>
+      {/* Header */}
+      <View className="bg-blue-500 px-4 pb-4 pt-12">
+        <View className="flex-row items-center">
+          <Map size={28} color="#ffffff" strokeWidth={2} />
+          <Text className="ml-3 text-2xl font-bold text-white">Refuel</Text>
         </View>
-      </Container>
+        <Text className="mt-1 text-blue-100">Plan your route with essential stops</Text>
+      </View>
+
+      {/* Content */}
+      <View className="flex-1 px-4">
+        {/* Upload Section */}
+        <TouchableOpacity
+          className="mt-4 items-center rounded-xl border-2 border-dashed border-blue-200 p-6"
+          activeOpacity={0.7}
+          onPress={handleSelectGPX}
+          disabled={loading}>
+          {loading ? (
+            <ActivityIndicator size="large" color="#3b82f6" />
+          ) : (
+            <>
+              <Upload size={40} color="#60a5fa" strokeWidth={2} />
+              <Text className="mt-2 font-medium text-blue-600">Upload GPX File</Text>
+              <Text className="mt-1 text-sm text-gray-400">Tap to select your route file</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        {gpxFileName && (
+          <View className="mt-4 rounded-xl bg-green-50 p-4">
+            <View className="flex-row items-center">
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-green-500">
+                <Text className="text-lg text-white">✓</Text>
+              </View>
+              <View className="ml-3 flex-1">
+                <Text className="text-xs text-green-600">Route loaded</Text>
+                <Text className="font-semibold text-green-700">{gpxFileName}</Text>
+              </View>
+            </View>
+
+            {/* Action Buttons */}
+            <View className="mt-4 gap-3">
+              <TouchableOpacity
+                className="flex-row items-center justify-center rounded-xl bg-blue-500 py-4"
+                activeOpacity={0.7}
+                onPress={() => router.push('/poi-selection')}>
+                <Text className="font-semibold text-white">Continue</Text>
+                <ArrowRight size={20} color="#ffffff" style={{ marginLeft: 8 }} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                className="flex-row items-center justify-center rounded-xl bg-gray-100 py-3"
+                activeOpacity={0.7}
+                onPress={handleReset}>
+                <RotateCcw size={18} color="#6b7280" style={{ marginRight: 8 }} />
+                <Text className="font-medium text-gray-600">Reset</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {!gpxFileName && (
+          <View className="mt-6 rounded-xl bg-blue-50 p-4">
+            <Text className="text-center text-sm leading-6 text-blue-700">
+              Upload a GPX file to find water supplies, stores, and restaurants along your route.
+            </Text>
+          </View>
+        )}
+      </View>
     </View>
   );
 }

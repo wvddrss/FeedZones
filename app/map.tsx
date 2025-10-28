@@ -5,7 +5,7 @@ import MapView, { Polyline, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import { cacheDirectory, documentDirectory, writeAsStringAsync } from 'expo-file-system/legacy';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Button } from '@/components/Button';
+import { Download, Route as RouteIcon, Eye } from 'lucide-react-native';
 import { useStore } from '@/store/store';
 import { fetchPOIsAlongRoute } from '@/utils/poiService';
 import { generateRouteWithPOIs, calculateRouteDistance } from '@/utils/routeGenerator';
@@ -295,31 +295,46 @@ export default function MapScreen() {
             <View className="mb-4 gap-3">
               {pois.filter((p) => p.selected).length > 0 && (
                 <>
-                  <Button
-                    title={
-                      loading
+                  <TouchableOpacity
+                    className={`flex-row items-center justify-center rounded-xl py-4 ${
+                      loading ? 'bg-gray-300' : showModifiedRoute ? 'bg-green-500' : 'bg-blue-500'
+                    }`}
+                    activeOpacity={0.7}
+                    onPress={handleGenerateRoute}
+                    disabled={loading}>
+                    {!loading && <RouteIcon size={20} color="#ffffff" style={{ marginRight: 8 }} />}
+                    <Text className="font-semibold text-white">
+                      {loading
                         ? 'Generating...'
                         : showModifiedRoute
-                          ? '✓ Route Generated'
-                          : '🗺️ Generate New Route'
-                    }
-                    onPress={handleGenerateRoute}
-                    disabled={loading}
-                  />
+                          ? 'Route Generated'
+                          : 'Generate New Route'}
+                    </Text>
+                  </TouchableOpacity>
                   {showModifiedRoute && (
-                    <Button
-                      title="👁️ Show Original Route"
-                      onPress={() => setShowModifiedRoute(false)}
-                    />
+                    <TouchableOpacity
+                      className="flex-row items-center justify-center rounded-xl bg-gray-100 py-3"
+                      activeOpacity={0.7}
+                      onPress={() => setShowModifiedRoute(false)}>
+                      <Eye size={18} color="#6b7280" style={{ marginRight: 8 }} />
+                      <Text className="font-medium text-gray-600">Show Original Route</Text>
+                    </TouchableOpacity>
                   )}
                 </>
               )}
 
-              <Button
-                title={loading ? 'Exporting...' : '💾 Export GPX'}
+              <TouchableOpacity
+                className={`flex-row items-center justify-center rounded-xl py-4 ${
+                  loading ? 'bg-gray-300' : 'bg-gray-100'
+                }`}
+                activeOpacity={0.7}
                 onPress={handleExportGPX}
-                disabled={loading}
-              />
+                disabled={loading}>
+                {!loading && <Download size={20} color="#6b7280" style={{ marginRight: 8 }} />}
+                <Text className={`font-semibold ${loading ? 'text-gray-500' : 'text-gray-600'}`}>
+                  {loading ? 'Exporting...' : 'Export GPX'}
+                </Text>
+              </TouchableOpacity>
 
               <View className="h-8" />
             </View>

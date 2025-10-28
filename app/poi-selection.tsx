@@ -1,14 +1,26 @@
 import { Stack, useRouter } from 'expo-router';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { useState } from 'react';
-import { Button } from '@/components/Button';
-import { Container } from '@/components/Container';
+import Slider from '@react-native-community/slider';
+import {
+  Droplets,
+  Store,
+  UtensilsCrossed,
+  Sliders as SlidersIcon,
+  ArrowRight,
+} from 'lucide-react-native';
 import { useStore } from '@/store/store';
+
+const POI_ICONS = {
+  water: Droplets,
+  store: Store,
+  food: UtensilsCrossed,
+};
 
 export default function POISelection() {
   const router = useRouter();
   const { poiTypes, maxDeviation, togglePOIType, setMaxDeviation, originalRoute } = useStore();
-  const [deviationInput, setDeviationInput] = useState(maxDeviation.toString());
+  const [radius, setRadius] = useState(maxDeviation);
 
   const handleNext = () => {
     if (!originalRoute) {
@@ -23,80 +35,94 @@ export default function POISelection() {
     }
 
     // Update max deviation
-    const deviation = parseFloat(deviationInput);
-    if (isNaN(deviation) || deviation <= 0) {
-      Alert.alert('Error', 'Please enter a valid deviation distance (greater than 0).');
-      return;
-    }
-    setMaxDeviation(deviation);
+    setMaxDeviation(radius);
 
     // Navigate to map
     router.push('/map');
   };
 
   return (
-    <View className="flex flex-1 bg-gray-50">
-      <Stack.Screen options={{ title: 'Find Along The Way' }} />
-      <Container>
-        <ScrollView className="flex-1">
-          <View className="flex-1 p-6">
-            <Text className="mb-2 text-2xl font-bold text-gray-900">What do you want to find?</Text>
-            <Text className="mb-6 text-base text-gray-600">Select the types of stops you need</Text>
+    <View className="flex-1 bg-white">
+      <Stack.Screen options={{ title: 'Find Along The Way', headerBackTitle: 'Back' }} />
 
-            <View className="mb-8">
-              {poiTypes.map((poiType) => (
-                <TouchableOpacity
-                  key={poiType.id}
-                  className={
-                    poiType.enabled
-                      ? 'mb-3 flex-row items-center rounded-lg border-2 border-blue-500 bg-blue-50 p-4 active:bg-blue-100'
-                      : 'mb-3 flex-row items-center rounded-lg border border-gray-200 bg-white p-4 active:bg-gray-50'
-                  }
-                  onPress={() => togglePOIType(poiType.id)}>
-                  <View className="mr-3 h-6 w-6 items-center justify-center rounded border-2 border-gray-300 bg-white">
-                    {poiType.enabled && <Text className="text-lg font-bold text-blue-600">✓</Text>}
-                  </View>
-                  <Text
-                    className={
-                      poiType.enabled
-                        ? 'flex-1 text-base font-semibold text-gray-900'
-                        : 'flex-1 text-base text-gray-700'
-                    }>
-                    {poiType.label}
-                  </Text>
-                  {poiType.id === 'water' && (
-                    <View className="rounded bg-orange-500 px-2 py-1">
-                      <Text className="text-xs font-semibold text-white">Important</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
+      <ScrollView className="flex-1 px-4">
+        {/* Header Info */}
+        <View className="mt-4 rounded-xl bg-blue-50 p-4">
+          <Text className="text-center text-sm leading-6 text-blue-700">
+            Select what you want to find along your route
+          </Text>
+        </View>
 
-            <View className="mb-8">
-              <Text className="mb-2 text-lg font-semibold text-gray-900">Maximum Deviation</Text>
-              <Text className="mb-4 text-sm text-gray-600">
-                How far from your route should we search?
-              </Text>
+        {/* Amenities Selection */}
+        <View className="mt-4 rounded-xl bg-gray-50 p-4">
+          <Text className="mb-3 font-medium text-gray-700">Find Along the Way</Text>
 
-              <View className="flex-row items-center rounded-lg border border-gray-300 bg-white p-4">
-                <TextInput
-                  className="flex-1 text-lg"
-                  value={deviationInput}
-                  onChangeText={setDeviationInput}
-                  keyboardType="numeric"
-                  placeholder="5"
+          {poiTypes.map((poiType) => {
+            const IconComponent = POI_ICONS[poiType.id as keyof typeof POI_ICONS];
+            return (
+              <TouchableOpacity
+                key={poiType.id}
+                className="flex-row items-center border-b border-gray-200 py-3"
+                onPress={() => togglePOIType(poiType.id)}>
+                <View
+                  className={`h-5 w-5 items-center justify-center rounded border ${
+                    poiType.enabled ? 'border-blue-500 bg-blue-500' : 'border-gray-300 bg-white'
+                  }`}>
+                  {poiType.enabled && <Text className="text-xs text-white">✓</Text>}
+                </View>
+                <IconComponent
+                  size={20}
+                  color="#3b82f6"
+                  strokeWidth={2}
+                  style={{ marginLeft: 12 }}
                 />
-                <Text className="ml-2 text-lg text-gray-600">km</Text>
-              </View>
-            </View>
+                <Text className="ml-2 flex-1 text-gray-600">{poiType.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
-            <View className="mb-8">
-              <Button title="Next" onPress={handleNext} />
+        {/* Radius Selector */}
+        <View className="mt-4 rounded-xl bg-gray-50 p-4">
+          <View className="flex-row items-center justify-between">
+            <Text className="font-medium text-gray-700">Search Radius</Text>
+            <View className="flex-row items-center">
+              <Text className="font-bold text-blue-500">{radius.toFixed(1)}</Text>
+              <Text className="ml-1 text-gray-500">km</Text>
             </View>
           </View>
-        </ScrollView>
-      </Container>
+          <View className="mt-2 flex-row items-center">
+            <SlidersIcon size={20} color="#60a5fa" strokeWidth={2} style={{ marginRight: 8 }} />
+            <View className="flex-1">
+              <Slider
+                style={{ width: '100%', height: 40 }}
+                minimumValue={1}
+                maximumValue={20}
+                value={radius}
+                onValueChange={setRadius}
+                minimumTrackTintColor="#3b82f6"
+                maximumTrackTintColor="#dbeafe"
+                thumbTintColor="#3b82f6"
+                step={0.5}
+              />
+            </View>
+          </View>
+          <Text className="mt-1 text-xs text-gray-500">
+            Adjust how far from your route to search for stops
+          </Text>
+        </View>
+
+        {/* Action Button */}
+        <View className="my-6">
+          <TouchableOpacity
+            className="flex-row items-center justify-center rounded-xl bg-blue-500 py-4"
+            activeOpacity={0.7}
+            onPress={handleNext}>
+            <Text className="font-semibold text-white">Find Points of Interest</Text>
+            <ArrowRight size={20} color="#ffffff" style={{ marginLeft: 8 }} />
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </View>
   );
 }
