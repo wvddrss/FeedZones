@@ -139,7 +139,7 @@ export default function MapScreen() {
       setLoading(true);
 
       const gpxContent = generateGPX(routeToExport);
-      const fileName = `refuel_route_${Date.now()}.gpx`;
+      const fileName = `feedzones_route_${Date.now()}.gpx`;
 
       // Create blob and download for web
       const blob = new Blob([gpxContent], { type: 'application/gpx+xml' });

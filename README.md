@@ -1,6 +1,6 @@
-# 🗺️ Refuel - GPX Route Planning App
+# 🗺️ FeedZones - GPX Route Planning App
 
-Refuel is a mobile app that helps you plan your routes with essential stops along the way. Load a GPX file, find water supplies, stores, and restaurants near your route, and export a modified GPX with your selected stops.
+FeedZones is a mobile app that helps you plan your routes with essential stops along the way. Load a GPX file, find water supplies, stores, and restaurants near your route, and export a modified GPX with your selected stops.
 
 ## 🎯 Features
 
@@ -34,7 +34,7 @@ Refuel is a mobile app that helps you plan your routes with essential stops alon
 
 1. Clone the repository
 ```bash
-cd Refuel
+cd FeedZones
 ```
 
 2. Install dependencies
@@ -91,7 +91,7 @@ npm run web
 ## 🏗️ Project Structure
 
 ```
-Refuel/
+FeedZones/
 ├── app/                    # App screens (Expo Router)
 │   ├── index.tsx          # Home/GPX upload screen
 │   ├── poi-selection.tsx  # POI type selection screen

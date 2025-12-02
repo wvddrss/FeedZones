@@ -25,7 +25,7 @@ export default function Layout() {
       let fileUri = url;
 
       // For our app scheme, check if it contains file data
-      if (url.startsWith('refill://')) {
+      if (url.startsWith('feedzones://')) {
         const parsed = Linking.parse(url);
         if (parsed.queryParams?.uri) {
           fileUri = parsed.queryParams.uri as string;

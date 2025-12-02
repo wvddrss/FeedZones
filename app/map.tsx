@@ -288,7 +288,7 @@ export default function MapScreen() {
       setLoading(true);
 
       const gpxContent = generateGPX(routeToExport);
-      const fileName = `refuel_route_${Date.now()}.gpx`;
+      const fileName = `feedzones_route_${Date.now()}.gpx`;
 
       // Get cache directory
       const cacheDir = cacheDirectory || documentDirectory || '';
@@ -306,7 +306,7 @@ export default function MapScreen() {
       // Share the file using expo-sharing
       await Sharing.shareAsync(fileUri, {
         mimeType: 'application/gpx+xml',
-        dialogTitle: 'Share your Refuel route',
+        dialogTitle: 'Share your FeedZones route',
         UTI: 'public.xml',
       });
 

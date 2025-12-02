@@ -67,17 +67,17 @@ export function generateGPX(route: GPXRoute): string {
     },
     gpx: {
       '@_version': '1.1',
-      '@_creator': 'Refuel App',
+      '@_creator': 'FeedZones App',
       '@_xmlns': 'http://www.topografix.com/GPX/1/1',
       '@_xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance',
       '@_xsi:schemaLocation':
         'http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd',
       metadata: {
-        name: route.name || 'Refuel Route',
+        name: route.name || 'FeedZones Route',
         time: new Date().toISOString(),
       },
       trk: {
-        name: route.name || 'Refuel Route',
+        name: route.name || 'FeedZones Route',
         trkseg: {
           trkpt: route.points.map((point) => ({
             '@_lat': point.lat,

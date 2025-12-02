@@ -88,7 +88,7 @@ export default function Home() {
         <View className="mx-auto w-full" style={{ maxWidth: 480 }}>
           <View className="flex-row items-center">
             <Map size={28} color="#ffffff" strokeWidth={2} />
-            <Text className="ml-3 text-2xl font-bold text-white">Refuel</Text>
+            <Text className="ml-3 text-2xl font-bold text-white">FeedZones</Text>
           </View>
           <Text className="mt-1 text-blue-100">Plan your route with essential stops</Text>
         </View>
