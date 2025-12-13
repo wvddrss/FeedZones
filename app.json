@@ -107,18 +107,15 @@
         }
       ]
     },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "6ce052b0-223c-4b1e-888b-01ee0a944f39"
-      }
-    },
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "updates": {
-      "url": "https://u.expo.dev/7d748ea4-a0d1-4661-8f1c-f6a853d98360"
-    },
-    "owner": "wvddries"
+    "owner": "wvddries",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "eb191fc5-876a-4c03-beba-eb2972dfa0c8"
+      }
+    }
   }
 }
