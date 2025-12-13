@@ -5,6 +5,7 @@ import { useEffect, useCallback } from 'react';
 import * as Linking from 'expo-linking';
 import { cacheDirectory, copyAsync, readAsStringAsync, deleteAsync } from 'expo-file-system/legacy';
 import { Alert } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useStore } from '@/store/store';
 import { parseGPX } from '@/utils/gpxParser';
 
@@ -114,5 +115,9 @@ export default function Layout() {
     };
   }, [handleFileIntent]);
 
-  return <Stack />;
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <Stack />
+    </GestureHandlerRootView>
+  );
 }

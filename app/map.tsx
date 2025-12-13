@@ -1,11 +1,12 @@
 import { Stack, useRouter } from 'expo-router';
-import { View, Text, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Dimensions, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, ActivityIndicator, ScrollView, useWindowDimensions, StyleSheet } from 'react-native';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Mapbox from '@rnmapbox/maps';
 import { cacheDirectory, documentDirectory, writeAsStringAsync } from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Download, Eye } from 'lucide-react-native';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useStore, POI } from '@/store/store';
 import { fetchPOIsAlongRoute } from '@/utils/poiService';
 import { generateRouteWithPOIs, calculateRouteDistance } from '@/utils/routeGenerator';
@@ -17,7 +18,6 @@ import Constants from 'expo-constants';
 const MAPBOX_TOKEN = Constants.expoConfig?.extra?.EXPO_PUBLIC_MAPBOX_TOKEN || process.env.EXPO_PUBLIC_MAPBOX_TOKEN || 'YOUR_MAPBOX_ACCESS_TOKEN';
 Mapbox.setAccessToken(MAPBOX_TOKEN);
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TABLET_BREAKPOINT = 768;
 
 // Get icon for POI type
@@ -111,9 +111,19 @@ export default function MapScreen() {
   const router = useRouter();
   const mapRef = useRef<Mapbox.MapView>(null);
   const cameraRef = useRef<Mapbox.Camera>(null);
-  const { width } = useWindowDimensions();
+  const bottomSheetRef = useRef<BottomSheet>(null);
+  const { width, height } = useWindowDimensions();
   const isTabletLandscape = width >= TABLET_BREAKPOINT;
   const insets = useSafeAreaInsets();
+
+  // Bottom sheet snap points: collapsed (25%), half (50%), expanded (85%)
+  const snapPoints = useMemo(() => ['25%', '50%', '85%'], []);
+  
+  // Calculate bottom padding for map camera based on collapsed bottom sheet height
+  const collapsedSheetHeight = useMemo(() => {
+    const percentage = parseInt(snapPoints[0]) / 100;
+    return height * percentage;
+  }, [snapPoints, height]);
 
   const {
     originalRoute,
@@ -159,7 +169,45 @@ export default function MapScreen() {
     };
   }, [modifiedRoute]);
 
+  // Fit map to route with appropriate padding based on layout
+  const fitMapToRoute = useCallback(() => {
+    if (!cameraRef.current || !originalRoute || originalRoute.points.length === 0) return;
+
+    const coords = originalRoute.points.map((p) => [p.lon, p.lat]);
+    const lons = coords.map(c => c[0]);
+    const lats = coords.map(c => c[1]);
+    
+    const ne = [Math.max(...lons), Math.max(...lats)] as [number, number];
+    const sw = [Math.min(...lons), Math.min(...lats)] as [number, number];
+    
+    // For mobile, use the collapsed bottom sheet height as bottom padding
+    // For tablet, use standard padding
+    const paddingBottom = isTabletLandscape ? 50 : collapsedSheetHeight;
+    
+    cameraRef.current.fitBounds(ne, sw, [50, 50, paddingBottom + 20, 50], 1000);
+  }, [originalRoute, isTabletLandscape, collapsedSheetHeight]);
+
   useEffect(() => {
+    const loadPOIs = async () => {
+      if (!originalRoute) return;
+
+      try {
+        console.log('🔍 Loading POIs...');
+        setLoadingPOIs(true);
+        const fetchedPOIs = await fetchPOIsAlongRoute(originalRoute.points, poiTypes, maxDeviation);
+        console.log(`✅ Loaded ${fetchedPOIs.length} POIs`);
+        setPOIs(fetchedPOIs);
+        setLoadingPOIs(false);
+      } catch (error) {
+        console.error('Error loading POIs:', error);
+        Alert.alert(
+          'Error',
+          'Failed to load POIs. Please check your internet connection and try again.'
+        );
+        setLoadingPOIs(false);
+      }
+    };
+
     console.log('🗺️ MapScreen mounted');
     console.log('📍 Original route points:', originalRoute?.points.length);
     if (originalRoute && originalRoute.points.length > 0) {
@@ -176,42 +224,18 @@ export default function MapScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadPOIs = async () => {
-    if (!originalRoute) return;
-
-    try {
-      console.log('🔍 Loading POIs...');
-      setLoadingPOIs(true);
-      const fetchedPOIs = await fetchPOIsAlongRoute(originalRoute.points, poiTypes, maxDeviation);
-      console.log(`✅ Loaded ${fetchedPOIs.length} POIs`);
-      setPOIs(fetchedPOIs);
-      setLoadingPOIs(false);
-
-      // Fit map to route
-      if (cameraRef.current && originalRoute.points.length > 0) {
-        const coords = originalRoute.points.map((p) => [p.lon, p.lat]);
-        // Calculate bounds
-        const lons = coords.map(c => c[0]);
-        const lats = coords.map(c => c[1]);
-        const bounds = {
-          ne: [Math.max(...lons), Math.max(...lats)],
-          sw: [Math.min(...lons), Math.min(...lats)],
-          paddingTop: 50,
-          paddingRight: 50,
-          paddingBottom: 300,
-          paddingLeft: 50,
-        };
-        cameraRef.current.fitBounds(bounds.ne as [number, number], bounds.sw as [number, number], [50, 50, 300, 50], 1000);
-      }
-    } catch (error) {
-      console.error('Error loading POIs:', error);
-      Alert.alert(
-        'Error',
-        'Failed to load POIs. Please check your internet connection and try again.'
-      );
-      setLoadingPOIs(false);
+  // Fit map to route once POIs are loaded (initial fit only)
+  useEffect(() => {
+    if (!loadingPOIs && pois.length >= 0 && originalRoute) {
+      // Small delay to ensure map is ready
+      const timer = setTimeout(() => {
+        fitMapToRoute();
+      }, 500);
+      return () => clearTimeout(timer);
     }
-  };
+  // Only run once when loading completes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingPOIs]);
 
   const handleGenerateRoute = useCallback(
     async ({ silent }: { silent?: boolean } = {}) => {
@@ -555,228 +579,364 @@ export default function MapScreen() {
           </ScrollView>
         </View>
       ) : (
-        // Mobile: Fixed map with scrollable POI list below
-        <View className="flex-1">
-          {/* Map Section - Fixed at top half */}
-          <View style={{ height: SCREEN_HEIGHT * 0.5 }}>
-            <Mapbox.MapView
-                ref={mapRef}
-                style={{ flex: 1 }}
-                styleURL={Mapbox.StyleURL.Street}
-                zoomEnabled={true}
-                scrollEnabled={true}
-                pitchEnabled={true}
-                rotateEnabled={true}
-                compassEnabled={true}
-                compassViewPosition={3}
-                scaleBarEnabled={false}
-                onPress={() => setSelectedPOIId(null)}
-                onDidFinishLoadingMap={() => {
-                  console.log('✅ Mapbox map loaded successfully (mobile)');
-                }}>
-                <Mapbox.Camera
-                  ref={cameraRef}
-                  zoomLevel={11}
-                  centerCoordinate={[originalRoute.points[0].lon, originalRoute.points[0].lat]}
+        // Mobile: Full-screen map with bottom sheet for POIs
+        <View style={styles.mobileContainer}>
+          {/* Full-screen Map */}
+          <Mapbox.MapView
+            ref={mapRef}
+            style={StyleSheet.absoluteFillObject}
+            styleURL={Mapbox.StyleURL.Street}
+            zoomEnabled={true}
+            scrollEnabled={true}
+            pitchEnabled={true}
+            rotateEnabled={true}
+            compassEnabled={true}
+            compassViewPosition={3}
+            scaleBarEnabled={false}
+            onPress={() => setSelectedPOIId(null)}
+            onDidFinishLoadingMap={() => {
+              console.log('✅ Mapbox map loaded successfully (mobile)');
+            }}>
+            <Mapbox.Camera
+              ref={cameraRef}
+              zoomLevel={11}
+              centerCoordinate={[originalRoute.points[0].lon, originalRoute.points[0].lat]}
+            />
+
+            {/* Original Route */}
+            {originalRouteGeoJSON && (
+              <Mapbox.ShapeSource id="originalRouteMobile" shape={originalRouteGeoJSON}>
+                <Mapbox.LineLayer
+                  id="originalRouteLineMobile"
+                  style={{
+                    lineColor: showModifiedRoute ? '#2563eb' : '#2563eb',
+                    lineWidth: 3,
+                    lineOpacity: showModifiedRoute ? 0.4 : 1,
+                    lineDasharray: showModifiedRoute ? [2, 2] : undefined,
+                  }}
                 />
+              </Mapbox.ShapeSource>
+            )}
 
-                {/* Original Route */}
-                {originalRouteGeoJSON && (
-                  <Mapbox.ShapeSource id="originalRouteMobile" shape={originalRouteGeoJSON}>
-                    <Mapbox.LineLayer
-                      id="originalRouteLineMobile"
-                      style={{
-                        lineColor: showModifiedRoute ? '#2563eb' : '#2563eb',
-                        lineWidth: 3,
-                        lineOpacity: showModifiedRoute ? 0.4 : 1,
-                        lineDasharray: showModifiedRoute ? [2, 2] : undefined,
-                      }}
-                    />
-                  </Mapbox.ShapeSource>
-                )}
+            {/* Modified Route */}
+            {modifiedRouteGeoJSON && (
+              <Mapbox.ShapeSource id="modifiedRouteMobile" shape={modifiedRouteGeoJSON}>
+                <Mapbox.LineLayer
+                  id="modifiedRouteLineMobile"
+                  style={{
+                    lineColor: '#16a34a',
+                    lineWidth: showModifiedRoute ? 5 : 2,
+                    lineOpacity: showModifiedRoute ? 1 : 0.6,
+                  }}
+                />
+              </Mapbox.ShapeSource>
+            )}
 
-                {/* Modified Route */}
-                {modifiedRouteGeoJSON && (
-                  <Mapbox.ShapeSource id="modifiedRouteMobile" shape={modifiedRouteGeoJSON}>
-                    <Mapbox.LineLayer
-                      id="modifiedRouteLineMobile"
-                      style={{
-                        lineColor: '#16a34a',
-                        lineWidth: showModifiedRoute ? 5 : 2,
-                        lineOpacity: showModifiedRoute ? 1 : 0.6,
-                      }}
-                    />
-                  </Mapbox.ShapeSource>
-                )}
-
-                {/* POI Markers - Render unselected first, then selected last (so it's on top) */}
-                {pois
-                  .filter((poi) => selectedPOIId !== poi.id)
-                  .map((poi) => (
-                    <POIMarker 
-                      key={poi.id} 
-                      poi={poi} 
-                      onToggle={() => {
-                        togglePOI(poi.id);
-                        setSelectedPOIId(null);
-                      }}
-                      isSelected={false}
-                      onSelect={() => setSelectedPOIId(poi.id)}
-                    />
-                  ))}
-                {/* Render selected marker last so it appears on top */}
-                {selectedPOIId && pois.find((poi) => poi.id === selectedPOIId) && (
-                  <POIMarker 
-                    key={selectedPOIId} 
-                    poi={pois.find((poi) => poi.id === selectedPOIId)!} 
-                    onToggle={() => {
-                      togglePOI(selectedPOIId);
-                      setSelectedPOIId(null);
-                    }}
-                    isSelected={true}
-                    onSelect={() => setSelectedPOIId(selectedPOIId)}
-                  />
-                )}
-
-                {/* Start Marker */}
-                {displayRoute && displayRoute.points.length > 0 && (
-                  <Mapbox.MarkerView coordinate={[displayRoute.points[0].lon, displayRoute.points[0].lat]} id="startMobile">
-                    <View style={{ alignItems: 'center' }}>
-                      <View style={{ backgroundColor: '#10b981', width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: 'white' }} />
-                      <Text style={{ fontSize: 10, fontWeight: 'bold', marginTop: 2, color: '#10b981' }}>Start</Text>
-                    </View>
-                  </Mapbox.MarkerView>
-                )}
-
-                {/* End Marker */}
-                {displayRoute && displayRoute.points.length > 1 && (
-                  <Mapbox.MarkerView 
-                    coordinate={[displayRoute.points[displayRoute.points.length - 1].lon, displayRoute.points[displayRoute.points.length - 1].lat]} 
-                    id="endMobile">
-                    <View style={{ alignItems: 'center' }}>
-                      <View style={{ backgroundColor: '#ef4444', width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: 'white' }} />
-                      <Text style={{ fontSize: 10, fontWeight: 'bold', marginTop: 2, color: '#ef4444' }}>End</Text>
-                    </View>
-                  </Mapbox.MarkerView>
-                )}
-
-                <Mapbox.UserLocation visible={true} />
-            </Mapbox.MapView>
-
-            {/* Route Stats Overlay */}
-            <View
-              style={{
-                position: 'absolute',
-                top: 16,
-                right: 16,
-                zIndex: 1000,
-              }}>
-              <RouteStatsOverlay
-                originalRoute={originalRoute}
-                modifiedRoute={modifiedRoute}
-                showModifiedRoute={showModifiedRoute}
+            {/* POI Markers - Render unselected first, then selected last (so it's on top) */}
+            {pois
+              .filter((poi) => selectedPOIId !== poi.id)
+              .map((poi) => (
+                <POIMarker 
+                  key={poi.id} 
+                  poi={poi} 
+                  onToggle={() => {
+                    togglePOI(poi.id);
+                    setSelectedPOIId(null);
+                  }}
+                  isSelected={false}
+                  onSelect={() => setSelectedPOIId(poi.id)}
+                />
+              ))}
+            {/* Render selected marker last so it appears on top */}
+            {selectedPOIId && pois.find((poi) => poi.id === selectedPOIId) && (
+              <POIMarker 
+                key={selectedPOIId} 
+                poi={pois.find((poi) => poi.id === selectedPOIId)!} 
+                onToggle={() => {
+                  togglePOI(selectedPOIId);
+                  setSelectedPOIId(null);
+                }}
+                isSelected={true}
+                onSelect={() => setSelectedPOIId(selectedPOIId)}
               />
-            </View>
+            )}
+
+            {/* Start Marker */}
+            {displayRoute && displayRoute.points.length > 0 && (
+              <Mapbox.MarkerView coordinate={[displayRoute.points[0].lon, displayRoute.points[0].lat]} id="startMobile">
+                <View style={{ alignItems: 'center' }}>
+                  <View style={{ backgroundColor: '#10b981', width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: 'white' }} />
+                  <Text style={{ fontSize: 10, fontWeight: 'bold', marginTop: 2, color: '#10b981' }}>Start</Text>
+                </View>
+              </Mapbox.MarkerView>
+            )}
+
+            {/* End Marker */}
+            {displayRoute && displayRoute.points.length > 1 && (
+              <Mapbox.MarkerView 
+                coordinate={[displayRoute.points[displayRoute.points.length - 1].lon, displayRoute.points[displayRoute.points.length - 1].lat]} 
+                id="endMobile">
+                <View style={{ alignItems: 'center' }}>
+                  <View style={{ backgroundColor: '#ef4444', width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: 'white' }} />
+                  <Text style={{ fontSize: 10, fontWeight: 'bold', marginTop: 2, color: '#ef4444' }}>End</Text>
+                </View>
+              </Mapbox.MarkerView>
+            )}
+
+            <Mapbox.UserLocation visible={true} />
+          </Mapbox.MapView>
+
+          {/* Route Stats Overlay - positioned above bottom sheet */}
+          <View
+            style={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              zIndex: 10,
+            }}>
+            <RouteStatsOverlay
+              originalRoute={originalRoute}
+              modifiedRoute={modifiedRoute}
+              showModifiedRoute={showModifiedRoute}
+            />
           </View>
 
-          {/* POI List Section - Scrollable */}
-          <ScrollView className="flex-1 bg-white px-4">
-              <View className="mb-4 mt-4">
-                <Text className="mb-2 text-xl font-bold text-gray-900">
-                  Points of Interest ({pois.length})
-                </Text>
-                {loadingPOIs ? (
-                  <View className="items-center py-8">
-                    <ActivityIndicator size="large" color="#2563eb" />
-                    <Text className="mt-4 text-gray-600">Loading POIs...</Text>
-                  </View>
-                ) : pois.length === 0 ? (
-                  <View className="rounded-lg bg-yellow-50 p-4 py-8">
-                    <Text className="text-center text-gray-700">
-                      No POIs found within {maxDeviation}km of your route. Try increasing the maximum
-                      deviation.
-                    </Text>
-                  </View>
-                ) : (
-                  <>
-                  <Text className="mb-4 text-sm text-gray-600">
-                    {pois.filter((p) => p.selected).length} selected • Tap markers on map or check
-                    boxes below
-                  </Text>
-
-                    {pois.map((poi) => (
-                      <TouchableOpacity
-                        key={poi.id}
-                        className={
-                          poi.selected
-                            ? 'mb-2 flex-row items-center rounded-lg border border-green-500 bg-green-50 p-3'
-                            : 'mb-2 flex-row items-center rounded-lg border border-gray-200 bg-white p-3'
-                        }
-                        onPress={() => togglePOI(poi.id)}>
-                        <View
-                          className={
-                            poi.selected
-                              ? 'mr-3 h-5 w-5 items-center justify-center rounded border-2 border-green-500 bg-green-500'
-                              : 'mr-3 h-5 w-5 items-center justify-center rounded border-2 border-gray-300 bg-white'
-                          }>
-                          {poi.selected && <Text className="text-xs font-bold text-white">✓</Text>}
-                        </View>
-                        <View className="flex-1">
-                          <Text
-                            className={
-                              poi.selected ? 'font-semibold text-gray-900' : 'text-gray-900'
-                            }>
-                            {poi.name}
-                          </Text>
-                          <Text className="text-sm text-gray-600">
-                            {poi.type} • At {poi.distanceAlongRoute.toFixed(1)}km •{' '}
-                            {poi.distanceFromRoute.toFixed(1)}km off route
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                </>
-              )}
-            </View>
-            {/* Extra padding at bottom to ensure content isn't hidden behind FABs */}
-            <View className="h-40" />
-          </ScrollView>
-
-          {/* Floating Action Buttons - Mobile Only */}
-          <View className="absolute right-6 gap-3" style={{ bottom: Math.max(insets.bottom, 24) }}>
+          {/* Floating Action Buttons - fixed position with safe area insets */}
+          <View 
+            style={[
+              styles.fabContainer,
+              { bottom: Math.max(insets.bottom, 16) + 16 }
+            ]}>
             {showModifiedRoute ? (
               <TouchableOpacity
-                className="flex-row items-center justify-center rounded-full bg-white px-6 py-3 shadow-lg"
+                style={styles.fab}
                 activeOpacity={0.7}
                 onPress={() => setShowModifiedRoute(false)}>
                 <Eye size={18} color="#6b7280" style={{ marginRight: 8 }} />
-                <Text className="font-medium text-gray-600">Show Original</Text>
+                <Text style={styles.fabText}>Show Original</Text>
               </TouchableOpacity>
-            ): (
+            ) : (
               <TouchableOpacity
-                className="flex-row items-center justify-center rounded-full bg-white px-6 py-3 shadow-lg"
+                style={styles.fab}
                 activeOpacity={0.7}
                 onPress={() => setShowModifiedRoute(true)}>
                 <Eye size={18} color="#6b7280" style={{ marginRight: 8 }} />
-                <Text className="font-medium text-gray-600">Show Modified</Text>
+                <Text style={styles.fabText}>Show Modified</Text>
               </TouchableOpacity>
             )}
 
             <TouchableOpacity
-              className={`flex-row items-center justify-center rounded-full px-6 py-3 shadow-lg ${
-                loading ? 'bg-gray-300' : 'bg-white'
-              }`}
+              style={[styles.fab, loading && styles.fabDisabled]}
               activeOpacity={0.7}
               onPress={handleExportGPX}
               disabled={loading}>
               {!loading && <Download size={20} color="#6b7280" style={{ marginRight: 8 }} />}
-              <Text className={`font-semibold ${loading ? 'text-gray-500' : 'text-gray-600'}`}>
+              <Text style={[styles.fabText, styles.fabTextBold, loading && styles.fabTextDisabled]}>
                 {loading ? 'Exporting...' : 'Export GPX'}
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Bottom Sheet for POI List */}
+          <BottomSheet
+            ref={bottomSheetRef}
+            index={0}
+            snapPoints={snapPoints}
+            backgroundStyle={styles.bottomSheetBackground}
+            handleIndicatorStyle={styles.bottomSheetIndicator}
+          >
+            <View style={styles.bottomSheetHeader}>
+              <Text style={styles.bottomSheetTitle}>
+                Points of Interest ({pois.length})
+              </Text>
+              {!loadingPOIs && pois.length > 0 && (
+                <Text style={styles.bottomSheetSubtitle}>
+                  {pois.filter((p) => p.selected).length} selected
+                </Text>
+              )}
+            </View>
+            
+            <BottomSheetScrollView contentContainerStyle={styles.bottomSheetContent}>
+              {loadingPOIs ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#2563eb" />
+                  <Text style={styles.loadingText}>Loading POIs...</Text>
+                </View>
+              ) : pois.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>
+                    No POIs found within {maxDeviation}km of your route. Try increasing the maximum
+                    deviation.
+                  </Text>
+                </View>
+              ) : (
+                pois.map((poi) => (
+                  <TouchableOpacity
+                    key={poi.id}
+                    style={[
+                      styles.poiItem,
+                      poi.selected && styles.poiItemSelected
+                    ]}
+                    onPress={() => togglePOI(poi.id)}>
+                    <View style={[
+                      styles.checkbox,
+                      poi.selected && styles.checkboxSelected
+                    ]}>
+                      {poi.selected && <Text style={styles.checkmark}>✓</Text>}
+                    </View>
+                    <View style={styles.poiInfo}>
+                      <Text style={[styles.poiName, poi.selected && styles.poiNameSelected]}>
+                        {poi.name}
+                      </Text>
+                      <Text style={styles.poiDetails}>
+                        {poi.type} • At {poi.distanceAlongRoute.toFixed(1)}km •{' '}
+                        {poi.distanceFromRoute.toFixed(1)}km off route
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
+              {/* Extra padding at bottom for safe area */}
+              <View style={{ height: insets.bottom + 20 }} />
+            </BottomSheetScrollView>
+          </BottomSheet>
         </View>
       )}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  mobileContainer: {
+    flex: 1,
+  },
+  fabContainer: {
+    position: 'absolute',
+    right: 16,
+    gap: 12,
+    zIndex: 10,
+  },
+  fab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'white',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  fabDisabled: {
+    backgroundColor: '#d1d5db',
+  },
+  fabText: {
+    color: '#4b5563',
+    fontWeight: '500',
+  },
+  fabTextBold: {
+    fontWeight: '600',
+  },
+  fabTextDisabled: {
+    color: '#6b7280',
+  },
+  bottomSheetBackground: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  bottomSheetIndicator: {
+    backgroundColor: '#d1d5db',
+    width: 40,
+  },
+  bottomSheetHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  bottomSheetTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  bottomSheetSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginTop: 4,
+  },
+  bottomSheetContent: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  loadingText: {
+    marginTop: 16,
+    color: '#6b7280',
+  },
+  emptyContainer: {
+    backgroundColor: '#fefce8',
+    padding: 16,
+    borderRadius: 8,
+  },
+  emptyText: {
+    color: '#374151',
+    textAlign: 'center',
+  },
+  poiItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: 'white',
+  },
+  poiItemSelected: {
+    borderColor: '#22c55e',
+    backgroundColor: '#f0fdf4',
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    backgroundColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  checkboxSelected: {
+    borderColor: '#22c55e',
+    backgroundColor: '#22c55e',
+  },
+  checkmark: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  poiInfo: {
+    flex: 1,
+  },
+  poiName: {
+    color: '#111827',
+    fontSize: 15,
+  },
+  poiNameSelected: {
+    fontWeight: '600',
+  },
+  poiDetails: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+});
